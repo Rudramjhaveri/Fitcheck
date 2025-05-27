@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fitness Coach - Squat Detection</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
+    <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;400&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Montserrat', Arial, sans-serif;
+            background: #f8fefb;
+            color: #222;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+        .bg-anim {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: 0;
+            pointer-events: none;
+        }
+        .navbar {
+            width: 100vw;
+            background: #fff;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 24px 32px 24px 32px;
+            position: relative;
+            z-index: 2;
+        }
+        .camera-btn {
+            background: #2ecc40;
+            color: #fff;
+            border: none;
+            padding: 14px 36px;
+            border-radius: 30px;
+            font-size: 1.1em;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(46,204,64,0.12);
+            transition: background 0.2s;
+            margin-right: 32px;
+        }
+        .camera-btn:hover {
+            background: #27ae60;
+        }
+        .logo {
+            font-size: 2.2em;
+            font-weight: 700;
+            color: #222;
+        }
+        .logo span {
+            color: #2ecc40;
+            text-shadow: 0 2px 8px #b6f5c6;
+        }
+        .main-content {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            justify-content: center;
+            min-height: 80vh;
+            z-index: 1;
+            position: relative;
+            gap: 48px;
+            padding: 32px 0;
+        }
+        .exercise-card {
+            background: #fff;
+            border-radius: 24px;
+            box-shadow: 0 8px 32px rgba(46,204,64,0.08);
+            padding: 40px 48px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            max-width: 380px;
+            width: 100%;
+            min-width: 260px;
+        }
+        .exercise-icon {
+            font-size: 3.5em;
+            color: #2ecc40;
+            margin-bottom: 18px;
+        }
+        .exercise-title {
+            font-size: 2em;
+            font-weight: 700;
+            color: #222;
+            margin-bottom: 10px;
+        }
+        .exercise-desc {
+            font-size: 1.2em;
+            color: #555;
+            margin-bottom: 18px;
+            text-align: center;
+        }
+        .camera-frame {
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(46,204,64,0.10);
+            border: 3px solid #eafaf1;
+            width: 700px;
+            height: 525px;
+            background: #eafaf1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        .p5Canvas {
+            position: absolute !important;
+            top: 0;
+            left: 0;
+            width: 100% !important;
+            height: 100% !important;
+        }
+        .success-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #2ecc40;
+            color: #fff;
+            padding: 28px 60px;
+            border-radius: 18px;
+            font-size: 2em;
+            font-weight: bold;
+            display: none;
+            z-index: 10;
+            box-shadow: 0 8px 32px rgba(46,204,64,0.18);
+            animation: fadeIn 0.5s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translate(-50%, -60%); }
+            to { opacity: 1; transform: translate(-50%, -50%); }
+        }
+        @media (max-width: 1200px) {
+            .main-content {
+                flex-direction: column;
+                align-items: center;
+                gap: 32px;
+            }
+            .camera-frame {
+                width: 98vw;
+                max-width: 98vw;
+                height: 60vw;
+                max-height: 70vw;
+            }
+        }
+        @media (max-width: 600px) {
+            .main-content { padding: 0 8px; }
+            .exercise-card, .camera-frame { width: 98vw; max-width: 100vw; }
+            .camera-frame { height: 60vw; min-height: 220px; }
+            .navbar { flex-direction: column; align-items: flex-start; padding: 16px 8px; }
+            .camera-btn { margin-right: 0; margin-bottom: 12px; }
+        }
+        .difficulty-selector {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+        }
+        .difficulty-btn {
+            padding: 8px 16px;
+            border: 2px solid #2ecc40;
+            border-radius: 20px;
+            background: transparent;
+            color: #2ecc40;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .difficulty-btn.active {
+            background: #2ecc40;
+            color: white;
+        }
+        .counter-display {
+            margin-top: 20px;
+            text-align: center;
+            width: 100%;
+        }
+        .counter-value {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: #2ecc40;
+            margin: 10px 0;
+        }
+        .counter-label {
+            font-size: 1.1em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #eafaf1;
+            border-radius: 4px;
+            margin-top: 15px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #2ecc40;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .audio-control {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 1.5em;
+            color: #2ecc40;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background-color 0.2s;
+        }
+        .audio-control:hover {
+            background: rgba(46, 204, 64, 0.1);
+        }
+        .restart-btn {
+            background: #2ecc40;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 20px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+            display: none;
+            transition: background-color 0.2s;
+        }
+        .restart-btn:hover {
+            background: #27ae60;
+        }
+        .restart-btn.visible {
+            display: inline-block;
+        }
+        .exercise-selector {
+            display: none;
+        }
+        .exercise-btn {
+            display: none;
+        }
+        .exercise-btn.active {
+            display: none;
+        }
+        .exercise-btn:hover {
+            display: none;
+        }
+        .exercise-btn.active:hover {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas class="bg-anim" id="bg-anim"></canvas>
+    <div class="navbar">
+        <button class="camera-btn" id="camera-on-btn">Camera On</button>
+        <div class="logo">Fit<span>Coach</span></div>
+                </div>
+    <div class="main-content">
+        <div class="exercise-card">
+            <button class="audio-control" id="audio-toggle" title="Toggle Sound">🔊</button>
+            <div class="exercise-icon" id="exercise-icon">🏋️‍♂️</div>
+            <div class="exercise-title" id="exercise-title">Squat</div>
+            <div class="exercise-desc" id="exercise-desc">Stand with your feet shoulder-width apart, bend your knees and lower your hips as if sitting, then return to standing. Try to keep your back straight!</div>
+            
+            <div class="difficulty-selector">
+                <button class="difficulty-btn active" data-sets="1" data-reps="10" data-time="30">Beginner</button>
+                <button class="difficulty-btn" data-sets="2" data-reps="10" data-time="45">Intermediate</button>
+                <button class="difficulty-btn" data-sets="3" data-reps="10" data-time="60">Advanced</button>
+            </div>
+
+            <div class="counter-display">
+                <div class="counter-label">Current Set</div>
+                <div class="counter-value" id="set-counter">1/1</div>
+                <div class="counter-label">Reps in Current Set</div>
+                <div class="counter-value" id="rep-counter">0/10</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <button class="restart-btn" id="restart-btn">Restart Workout</button>
+            </div>
+            </div>
+        <div class="camera-frame" id="camera-frame">
+            <div class="success-message" id="success-message">Great Squat! 🎉</div>
+                <div id="canvas-container"></div>
+            </div>
+    </div>
+    <div id="success-popup" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(34,34,34,0.35);z-index:1000;align-items:center;justify-content:center;">
+        <div style="background:#fff;border-radius:24px;box-shadow:0 8px 32px rgba(46,204,64,0.18);padding:48px 60px;display:flex;flex-direction:column;align-items:center;position:relative;">
+            <div style="font-size:3em;color:#2ecc40;margin-bottom:12px;">✔️</div>
+            <div style="font-size:2em;font-weight:700;color:#222;margin-bottom:8px;">Perfect Squat!</div>
+            <button id="close-popup" style="margin-top:18px;background:#2ecc40;color:#fff;border:none;padding:10px 28px;border-radius:18px;font-size:1.1em;font-weight:600;cursor:pointer;">Close</button>
+        </div>
+    </div>
+    <script>
+        // Lighter, more subtle background animation
+        const bgCanvas = document.getElementById('bg-anim');
+        const ctx = bgCanvas.getContext('2d');
+        let points = [];
+        function resizeBg() {
+            bgCanvas.width = window.innerWidth;
+            bgCanvas.height = window.innerHeight;
+            points = [];
+            for (let i = 0; i < 40; i++) {
+                points.push({
+                    x: Math.random() * bgCanvas.width,
+                    y: Math.random() * bgCanvas.height,
+                    dx: (Math.random() - 0.5) * 0.5,
+                    dy: (Math.random() - 0.5) * 0.5
+                });
+            }
+        }
+        function drawBg() {
+            ctx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+            ctx.strokeStyle = 'rgba(46,204,64,0.06)'; // lighter
+            ctx.lineWidth = 1.1;
+            for (let i = 0; i < points.length; i++) {
+                for (let j = i + 1; j < points.length; j++) {
+                    let dx = points[i].x - points[j].x;
+                    let dy = points[i].y - points[j].y;
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 180) {
+                        ctx.beginPath();
+                        ctx.moveTo(points[i].x, points[i].y);
+                        ctx.lineTo(points[j].x, points[j].y);
+                        ctx.stroke();
+                    }
+                }
+            }
+            for (let p of points) {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, 2 * Math.PI);
+                ctx.fillStyle = 'rgba(46,204,64,0.13)'; // lighter
+                ctx.fill();
+                p.x += p.dx;
+                p.y += p.dy;
+                if (p.x < 0 || p.x > bgCanvas.width) p.dx *= -1;
+                if (p.y < 0 || p.y > bgCanvas.height) p.dy *= -1;
+            }
+            requestAnimationFrame(drawBg);
+        }
+        window.addEventListener('resize', resizeBg);
+        resizeBg();
+        drawBg();
+    </script>
+    <script>
+        let video, poseNet, poses = [], canvas, isCameraOn = false;
+        let squatDetected = false;
+        let currentSet = 1;
+        let currentRep = 0;
+        let totalSets = 1;
+        let repsPerSet = 10;
+        let isInSquatPosition = false;
+        let lastSquatState = false;
+        let isMuted = false;
+        let repSound, setSound, completeSound;
+
+        document.getElementById('camera-on-btn').addEventListener('click', function() {
+            if (!isCameraOn) {
+                isCameraOn = true;
+                this.textContent = 'Camera Off';
+                this.style.background = '#e74c3c';
+                startCamera();
+            } else {
+                isCameraOn = false;
+                this.textContent = 'Camera On';
+                this.style.background = '#2ecc40';
+                stopCamera();
+            }
+        });
+
+        function stopCamera() {
+            if (video) {
+                video.stop();
+                video.remove();
+            }
+            // Remove all p5 canvases
+            const canvases = document.querySelectorAll('.p5Canvas');
+            canvases.forEach(canvas => canvas.remove());
+            // Clear the canvas container
+            const container = document.getElementById('canvas-container');
+            if (container) {
+                container.innerHTML = '';
+            }
+            if (poseNet) {
+                poseNet = null;
+            }
+            poses = [];
+            resetCounters();
+        }
+
+        function startCamera() {
+            // Clear any existing canvases first
+            stopCamera();
+            
+            // Create new canvas with proper dimensions
+            canvas = createCanvas(700, 525);
+            canvas.parent('canvas-container');
+            canvas.style('display', 'block');
+            
+            video = createCapture(VIDEO);
+            video.size(700, 525);
+            video.hide();
+            
+            poseNet = ml5.poseNet(video, {
+                architecture: 'MobileNetV1',
+                imageScaleFactor: 0.6,
+                outputStride: 16,
+                minConfidence: 0.7,
+                maxPoseDetections: 1,
+                scoreThreshold: 0.6,
+                nmsRadius: 20,
+                detectionType: 'single'
+            }, () => {
+                console.log('PoseNet Model Loaded!');
+            });
+            poseNet.on('pose', gotPoses);
+            initAudio();
+        }
+        function gotPoses(results) {
+            poses = results;
+            if (poses.length > 0 && !squatDetected) {
+                if (checkSquat(poses[0].pose)) {
+                    squatDetected = true;
+                    showSuccess();
+                }
+            }
+        }
+        function checkSquat(pose) {
+            // Less strict squat detection: more tolerance for hip/knee/torso
+            const leftHip = pose.keypoints[11];
+            const rightHip = pose.keypoints[12];
+            const leftKnee = pose.keypoints[13];
+            const rightKnee = pose.keypoints[14];
+            const leftShoulder = pose.keypoints[5];
+            const rightShoulder = pose.keypoints[6];
+            if (
+                leftHip.score > 0.6 && rightHip.score > 0.6 &&
+                leftKnee.score > 0.6 && rightKnee.score > 0.6 &&
+                leftShoulder.score > 0.6 && rightShoulder.score > 0.6
+            ) {
+                // Hips below knees (allow more tolerance)
+                const hipsBelowKnees =
+                    leftHip.position.y > leftKnee.position.y - 30 &&
+                    rightHip.position.y > rightKnee.position.y - 30;
+                // Torso upright (shoulders above hips, more tolerance)
+                const torsoUpright =
+                    leftShoulder.position.y < leftHip.position.y - 5 &&
+                    rightShoulder.position.y < rightHip.position.y - 5;
+                // Knees bent (hips not too far above knees, more tolerance)
+                const kneesBent =
+                    Math.abs(leftHip.position.y - leftKnee.position.y) < 120 &&
+                    Math.abs(rightHip.position.y - rightKnee.position.y) < 120;
+                const isSquat = hipsBelowKnees && torsoUpright && kneesBent;
+                
+                // Rep counting logic
+                if (isSquat && !isInSquatPosition) {
+                    isInSquatPosition = true;
+                } else if (!isSquat && isInSquatPosition) {
+                    isInSquatPosition = false;
+                    currentRep++;
+                    playSound(repSound);
+                    
+                    if (currentRep >= repsPerSet) {
+                        if (currentSet < totalSets) {
+                            currentSet++;
+                            currentRep = 0;
+                            playSound(setSound);
+                            showSuccess();
+                        } else {
+                            playSound(completeSound);
+                            showCompletion();
+                        }
+                    }
+                    updateDisplay();
+                }
+                
+                return isSquat;
+            }
+            return false;
+        }
+        function showSuccess() {
+            if (currentSet <= totalSets) {
+            showPopup();
+            setTimeout(() => {
+                hidePopup();
+                squatDetected = false;
+            }, 2000);
+            }
+        }
+        function showCompletion() {
+            const popup = document.getElementById('success-popup');
+            popup.querySelector('div div:nth-child(2)').textContent = 'Workout Complete! 🎉';
+            showPopup();
+            setTimeout(() => {
+                hidePopup();
+                resetCounters();
+            }, 3000);
+        }
+        function draw() {
+            if (!isCameraOn) {
+                // Clear the canvas container when camera is off
+                const container = document.getElementById('canvas-container');
+                if (container) {
+                    container.innerHTML = '';
+                }
+                return;
+            }
+            
+            if (!canvas) return;
+            
+            background(234, 250, 241);
+            if (video) {
+                image(video, 0, 0, width, height);
+            }
+            
+            if (poses.length > 0) {
+                let pose = poses[0].pose;
+                
+                // Squat detection code
+                const isSquat = checkSquat(pose);
+                if (isSquat && !isInSquatPosition) {
+                    isInSquatPosition = true;
+                } else if (!isSquat && isInSquatPosition) {
+                    isInSquatPosition = false;
+                    currentRep++;
+                    playSound(repSound);
+                    
+                    if (currentRep >= repsPerSet) {
+                        if (currentSet < totalSets) {
+                            currentSet++;
+                            currentRep = 0;
+                            playSound(setSound);
+                            showSuccess();
+                        } else {
+                            playSound(completeSound);
+                            showCompletion();
+                        }
+                    }
+                    updateDisplay();
+                }
+
+                // Draw skeleton
+                stroke(46, 204, 64);
+                strokeWeight(3);
+                for (let connection of [
+                    [5, 7], [7, 9], [6, 8], [8, 10], [5, 6], [11, 12], 
+                    [5, 11], [6, 12], [11, 13], [13, 15], [12, 14], [14, 16]
+                ]) {
+                    let partA = pose.keypoints[connection[0]];
+                    let partB = pose.keypoints[connection[1]];
+                    if (partA.score > 0.7 && partB.score > 0.7) {
+                        line(partA.position.x, partA.position.y, partB.position.x, partB.position.y);
+                    }
+                }
+
+                // Draw keypoints
+                noStroke();
+                for (let keypoint of pose.keypoints) {
+                    if (keypoint.score > 0.7) {
+                        fill(46, 204, 64);
+                        ellipse(keypoint.position.x, keypoint.position.y, 10);
+                    }
+                }
+            }
+        }
+
+        // Add window resize handler to maintain canvas size
+        window.addEventListener('resize', function() {
+            if (canvas && isCameraOn) {
+                canvas.size(700, 525);
+                if (video) {
+                    video.size(700, 525);
+                }
+            }
+        });
+    </script>
+    <script>
+        function showPopup() {
+            document.getElementById('success-popup').style.display = 'flex';
+        }
+        function hidePopup() {
+            document.getElementById('success-popup').style.display = 'none';
+        }
+        document.getElementById('close-popup').onclick = hidePopup;
+    </script>
+    <script>
+        // Remove exercise selection code
+        function updateExerciseUI() {
+            const icon = document.getElementById('exercise-icon');
+            const title = document.getElementById('exercise-title');
+            const desc = document.getElementById('exercise-desc');
+            
+            icon.textContent = '🏋️‍♂️';
+            title.textContent = 'Squat';
+            desc.textContent = 'Stand with your feet shoulder-width apart, bend your knees and lower your hips as if sitting, then return to standing. Try to keep your back straight!';
+            
+            document.querySelectorAll('.difficulty-btn').forEach(btn => {
+                btn.dataset.reps = '10';
+            });
+            updateDisplay();
+        }
+
+        // Modify difficulty selector
+        document.querySelectorAll('.difficulty-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.difficulty-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                totalSets = parseInt(this.dataset.sets);
+                repsPerSet = parseInt(this.dataset.reps);
+                resetCounters();
+                updateDisplay();
+            });
+        });
+
+        function updateDisplay() {
+            document.getElementById('set-counter').textContent = `${currentSet}/${totalSets}`;
+            document.getElementById('rep-counter').textContent = `${currentRep}/${repsPerSet}`;
+            const progress = (currentRep / repsPerSet) * 100;
+            document.getElementById('progress-fill').style.width = `${progress}%`;
+            
+            if (currentSet > totalSets) {
+                document.getElementById('restart-btn').classList.add('visible');
+            }
+        }
+
+        function resetCounters() {
+            currentSet = 1;
+            currentRep = 0;
+            isInSquatPosition = false;
+            updateDisplay();
+            document.getElementById('restart-btn').classList.remove('visible');
+        }
+    </script>
+    <script>
+        // Initialize audio
+        function initAudio() {
+            repSound = new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU');
+            setSound = new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU');
+            completeSound = new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU');
+            
+            // Create simple beep sounds
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Rep sound (short beep)
+            const repOsc = audioContext.createOscillator();
+            const repGain = audioContext.createGain();
+            repOsc.connect(repGain);
+            repGain.connect(audioContext.destination);
+            repOsc.frequency.value = 800;
+            repGain.gain.value = 0.1;
+            repOsc.start();
+            repOsc.stop(audioContext.currentTime + 0.1);
+            
+            // Set sound (double beep)
+            const setOsc = audioContext.createOscillator();
+            const setGain = audioContext.createGain();
+            setOsc.connect(setGain);
+            setGain.connect(audioContext.destination);
+            setOsc.frequency.value = 1000;
+            setGain.gain.value = 0.1;
+            setOsc.start();
+            setOsc.stop(audioContext.currentTime + 0.2);
+            
+            // Complete sound (triple beep)
+            const completeOsc = audioContext.createOscillator();
+            const completeGain = audioContext.createGain();
+            completeOsc.connect(completeGain);
+            completeGain.connect(audioContext.destination);
+            completeOsc.frequency.value = 1200;
+            completeGain.gain.value = 0.1;
+            completeOsc.start();
+            completeOsc.stop(audioContext.currentTime + 0.3);
+        }
+
+        // Play sound if not muted
+        function playSound(sound) {
+            if (!isMuted) {
+                sound.currentTime = 0;
+                sound.play().catch(e => console.log('Audio play failed:', e));
+            }
+        }
+
+        // Audio toggle functionality
+        document.getElementById('audio-toggle').addEventListener('click', function() {
+            isMuted = !isMuted;
+            this.textContent = isMuted ? '🔇' : '🔊';
+            this.title = isMuted ? 'Unmute Sound' : 'Mute Sound';
+        });
+
+        // Restart button functionality
+        document.getElementById('restart-btn').addEventListener('click', function() {
+            resetCounters();
+            this.classList.remove('visible');
+        });
+    </script>
+</body>
+</html>
